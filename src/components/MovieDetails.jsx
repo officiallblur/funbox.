@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import ".././App.css";
 import Footer from "./Footer";
+import DownloadLinks from './DownloadLinks'
+import { supabase } from '../supabaseClient'
 
 const API_KEY = "ce1a0db13c99a45fd7effb86ab82f78f";
 const BASE_URL = "https://api.themoviedb.org/3";
@@ -14,13 +16,27 @@ const MovieDetails = () => {
   const [cast, setCast] = useState([]);
   const [recommendations, setRecommendations] = useState([]);
   const [trailerId, setTrailerId] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     fetchMovieDetails();
     fetchMovieCast();
     fetchRecommendations();
     fetchTrailer();
+    checkAdmin()
   }, [id]);
+
+  const checkAdmin = async () => {
+    try {
+      const { data: { session } = {} } = await supabase.auth.getSession()
+      const userId = session?.user?.id
+      if (!userId) return
+      const { data, error } = await supabase.from('users').select('role').eq('id', userId).single()
+      if (!error && data?.role === 'admin') setIsAdmin(true)
+    } catch (err) {
+      console.warn('Could not determine admin status', err)
+    }
+  }
 
   const fetchMovieDetails = async () => {
     const response = await fetch(
@@ -141,6 +157,11 @@ const MovieDetails = () => {
             </div>
           </div>
         )}
+
+        {/* Download links for this movie; admins can edit */}
+        <div style={{ marginTop: 24 }}>
+          <DownloadLinks editable={isAdmin} movieId={movie.id} />
+        </div>
 
       
         <div className="cast-section">

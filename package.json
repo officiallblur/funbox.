@@ -6,12 +6,18 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "db:init": "node ./scripts/init-db.js",
+    "db:create-admin": "node ./scripts/create-admin.js",
+    "tmdb-proxy": "node ./server/tmdb-proxy.js",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.84.0",
+    "postgres": "^3.4.7",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
+    "react-icons": "^5.5.0",
     "react-router-dom": "^7.9.4"
   },
   "devDependencies": {
@@ -23,6 +29,7 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.22",
     "globals": "^16.4.0",
+    "supabase": "^2.62.5",
     "vite": "^7.1.7"
   }
 }

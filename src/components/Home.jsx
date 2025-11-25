@@ -58,23 +58,51 @@ const Home = () => {
     }
   };
 
+  const handleClearAll = () => {
+    setSearchTerm("");
+    fetchLatestMovies();
+  };
+
   return (
     <div className="app">
       <h1>Funbox</h1>
 
-      <div className="search">
+      <div className="search" style={{ position: "relative" }}>
         <input
           value={searchTerm}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
           placeholder="Search for movies or TV series"
         />
+
         <img
           src={SearchIcon}
           alt="search"
           onClick={() => fetchMovies(searchTerm)}
-          style={{ cursor: "pointer" }}
+          style={{ cursor: "pointer", marginLeft: "8px" }}
         />
+
+      
+        {searchTerm && (
+          <button
+            onClick={handleClearAll}
+            style={{
+              position: "absolute",
+              right: "60px",
+              top: "50%",
+              transform: "translateY(-50%)",
+              background: "transparent",
+              border: "none",
+              color: "#fff",
+              fontSize: "14px",
+              cursor: "pointer",
+              opacity: "0.8",
+              fontSize: "20px"
+            }}
+          >
+          X
+          </button>
+        )}
       </div>
 
       {movies?.length > 0 ? (

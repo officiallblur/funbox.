@@ -32,6 +32,8 @@ const Admin = () => {
   const [seriesSeason, setSeriesSeason] = useState('')
   const [seriesEpisodes, setSeriesEpisodes] = useState('') // comma-separated for manual
   const [seriesScrapingLoading, setSeriesScrapingLoading] = useState(false)
+  const [showMovieScraperModal, setShowMovieScraperModal] = useState(false)
+  const [movieScrapingLoading, setMovieScrapingLoading] = useState(false)
   const tmdbSeriesTimer = useRef(null)
 
   const showMsg = (text, type = 'success') => {
@@ -320,6 +322,10 @@ const Admin = () => {
             <h2 style={{ ...h2Style, marginTop: 12 }}>Add Movie Link</h2>
             <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
               <button onClick={() => setShowBulkMovieForm(true)} style={{ ...primaryButtonStyle, background: '#7c3aed' }}>+ Bulk Add</button>
+              <button onClick={() => {
+                if (!selectedTmdb) return showMsg('Please select a movie first', 'error')
+                setShowMovieScraperModal(true)
+              }} style={{ ...primaryButtonStyle, background: '#f59e0b' }}>🎬 Scrape Movie</button>
             </div>
             <NewLinkForm onAdded={() => fetchLinks()} showMsg={showMsg} selectedTmdb={selectedTmdb} />
 
@@ -802,9 +808,13 @@ const Admin = () => {
 
                       try {
                         if (seriesScraperMode === 'season') {
-                          // Scrape all episodes of the season - we'll do 1-20 as a reasonable upper bound
-                          const episodesToScrape = Array.from({ length: 20 }, (_, i) => i + 1)
+                          // Scrape all episodes of the season - we'll do 1-30 to cover most seasons
+                          const episodesToScrape = Array.from({ length: 30 }, (_, i) => i + 1)
+                          let successCount = 0
+                          let attemptedCount = 0
+                          
                           for (const ep of episodesToScrape) {
+                            attemptedCount++
                             try {
                               const resp = await fetch(`/api/scraper/episode`, {
                                 method: 'POST',
@@ -814,14 +824,18 @@ const Admin = () => {
                               const text = await resp.text()
                               let data
                               try { data = text ? JSON.parse(text) : {} } catch (e) { data = {} }
-                              if (resp.ok && data && data.success && data.count > 0) {
+                              if (resp.ok && data && data.success) {
                                 totalCount += (data.count || 0)
-                                if (!scrapedIds.includes(tvId)) scrapedIds.push(tvId)
+                                if (data.count > 0) {
+                                  successCount++
+                                  if (!scrapedIds.includes(tvId)) scrapedIds.push(tvId)
+                                }
                               }
                             } catch (e) {
                               console.warn(`Episode ${ep} failed:`, e)
                             }
                           }
+                          showMsg(`✓ Season ${season}: ${totalCount} link(s) found across ${successCount}/${attemptedCount} episodes checked`)
                         } else {
                           // Manual episode selection - parse episodes
                           const episodeSet = new Set()
@@ -835,6 +849,8 @@ const Admin = () => {
                             }
                           }
                           const episodesToScrape = Array.from(episodeSet).filter(e => !isNaN(e) && e > 0).sort((a, b) => a - b)
+                          let successCount = 0
+                          
                           for (const ep of episodesToScrape) {
                             try {
                               const resp = await fetch(`/api/scraper/episode`, {
@@ -845,17 +861,19 @@ const Admin = () => {
                               const text = await resp.text()
                               let data
                               try { data = text ? JSON.parse(text) : {} } catch (e) { data = {} }
-                              if (resp.ok && data && data.success && data.count > 0) {
+                              if (resp.ok && data && data.success) {
                                 totalCount += (data.count || 0)
-                                if (!scrapedIds.includes(tvId)) scrapedIds.push(tvId)
+                                if (data.count > 0) {
+                                  successCount++
+                                  if (!scrapedIds.includes(tvId)) scrapedIds.push(tvId)
+                                }
                               }
                             } catch (e) {
                               console.warn(`Episode ${ep} failed:`, e)
                             }
                           }
+                          showMsg(`✓ ${successCount}/${episodesToScrape.length} episodes had links. Total: ${totalCount} link(s)`)
                         }
-
-                        showMsg(`✓ Scraping complete: Found ${totalCount} link(s)`)
                         setShowSeriesScraperModal(false)
                         setSeriesSeason('')
                         setSeriesEpisodes('')
@@ -899,6 +917,69 @@ const Admin = () => {
             </div>
             <div style={{ padding: 18, borderTop: '1px solid rgba(255,255,255,0.1)', flexShrink: 0, textAlign: 'right' }}>
               <button onClick={() => setShowBulkMovieForm(false)} style={{ padding: '8px 12px', borderRadius: 8 }}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Movie Scraper Modal */}
+      {showMovieScraperModal && selectedTmdb && (
+        <div style={{ position: 'fixed', left: 0, top: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10001 }} onClick={() => setShowMovieScraperModal(false)}>
+          <div style={{ background: '#071021', color: '#e6eef8', borderRadius: 10, maxWidth: 500, width: '96%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ padding: 18, borderBottom: '1px solid rgba(255,255,255,0.1)', flexShrink: 0 }}>
+              <div style={{ fontSize: 18, fontWeight: 700 }}>Scrape Movie - {selectedTmdb.title}</div>
+              <div style={{ fontSize: 12, color: '#9fb0c8', marginTop: 6 }}>Find download links from Nkiri</div>
+            </div>
+
+            <div style={{ flex: 1, overflowY: 'auto', padding: 18, display: 'grid', gap: 16 }}>
+              <div style={{ background: 'rgba(74,222,128,0.1)', padding: 12, borderRadius: 6, borderLeft: '3px solid #4ade80' }}>
+                <div style={{ fontWeight: 600, color: '#4ade80', marginBottom: 6 }}>🎬 {selectedTmdb.title}</div>
+                <div style={{ fontSize: 12, color: '#9fb0c8' }}>
+                  Movie ID: {selectedTmdb.id}
+                  <br />
+                  This will search Nkiri for available download links for this movie and add them automatically.
+                </div>
+              </div>
+            </div>
+
+            <div style={{ padding: 18, borderTop: '1px solid rgba(255,255,255,0.1)', flexShrink: 0, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => setShowMovieScraperModal(false)} style={{ padding: '8px 12px', borderRadius: 6, background: 'transparent' }}>Cancel</button>
+              <button
+                onClick={async () => {
+                  const { data: session } = await supabase.auth.getSession()
+                  const token = session?.session?.access_token
+                  if (!token) return showMsg('Authentication required', 'error')
+
+                  setMovieScrapingLoading(true)
+                  try {
+                    const resp = await fetch(`/api/scraper/movie`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                      body: JSON.stringify({ movieId: Number(selectedTmdb.id), movieTitle: selectedTmdb.title })
+                    })
+                    const text = await resp.text()
+                    let data
+                    try { data = text ? JSON.parse(text) : {} } catch (e) { data = {} }
+                    if (resp.ok && data && data.success) {
+                      showMsg(`✓ Found ${data.count || 0} link(s) for ${selectedTmdb.title}`)
+                      setShowMovieScraperModal(false)
+                      await pollForInserts([Number(selectedTmdb.id)], 'download_links', 'movie_id')
+                      fetchLinks()
+                    } else {
+                      showMsg(`No links found for ${selectedTmdb.title}`, 'error')
+                    }
+                  } catch (e) {
+                    console.error('Movie scraping error:', e)
+                    showMsg('Scraping failed: ' + (e.message || e), 'error')
+                  } finally {
+                    setMovieScrapingLoading(false)
+                  }
+                }}
+                disabled={movieScrapingLoading}
+                style={{ ...primaryButtonStyle }}
+              >
+                {movieScrapingLoading ? 'Scraping...' : 'Start Scraping'}
+              </button>
             </div>
           </div>
         </div>

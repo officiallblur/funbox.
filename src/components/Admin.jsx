@@ -43,6 +43,9 @@ const Admin = () => {
   const [tmdbLoading, setTmdbLoading] = useState(false)
   const [selectedTmdb, setSelectedTmdb] = useState(null)
   const tmdbTimer = useRef(null)
+  
+  // Series scraper modal state
+  const [showSeriesScraper, setShowSeriesScraper] = useState(false)
 
   const searchTmdb = async (q) => {
     if (!q || q.trim().length < 2) {
@@ -189,7 +192,7 @@ const Admin = () => {
               {(!tmdbLoading && tmdbResults.length === 0 && tmdbQuery.trim().length >= 2) && <div style={{ color: '#9fb0c8' }}>No results</div>}
             </div>
             <h2 style={{ ...h2Style, marginTop: 12 }}>Download Links (All)</h2>
-            <NewLinkForm onAdded={() => fetchLinks()} showMsg={showMsg} selectedTmdb={selectedTmdb} />
+            <NewLinkForm onAdded={() => fetchLinks()} showMsg={showMsg} selectedTmdb={selectedTmdb} onOpenSeriesScraper={() => setShowSeriesScraper(true)} />
             {loadingLinks ? <p>Loading links...</p> : (
               <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
                 {links.map(l => (
@@ -198,12 +201,22 @@ const Admin = () => {
                 {links.length === 0 && <p>No links found.</p>}
               </div>
             )}
-            
-            <h2 style={{ ...h2Style, marginTop: 16 }}>Scrape Series Episodes (TMDB)</h2>
-            <SeriesScraperForm onAdded={() => fetchLinks()} showMsg={showMsg} />
           </section>
         </div>
       </div>
+
+      {/* Series Scraper Modal */}
+      {showSeriesScraper && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: '#0f1720', borderRadius: 8, padding: 24, maxWidth: 600, maxHeight: '80vh', overflow: 'auto', color: '#e6eef8' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 style={{ margin: 0 }}>Scrape Series Episodes (TMDB)</h3>
+              <button onClick={() => setShowSeriesScraper(false)} style={{ background: 'transparent', color: '#9fb0c8', border: 'none', fontSize: 24, cursor: 'pointer' }}>×</button>
+            </div>
+            <SeriesScraperForm onAdded={() => { fetchLinks(); setShowSeriesScraper(false) }} showMsg={showMsg} />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -230,7 +243,7 @@ const UserRow = ({ user, onToggleRole, onDelete }) => {
   )
 }
 
-const NewLinkForm = ({ onAdded, showMsg, selectedTmdb }) => {
+const NewLinkForm = ({ onAdded, showMsg, selectedTmdb, onOpenSeriesScraper }) => {
   const [title, setTitle] = useState('')
   const [url, setUrl] = useState('')
   const [movieId, setMovieId] = useState('')
@@ -267,6 +280,7 @@ const NewLinkForm = ({ onAdded, showMsg, selectedTmdb }) => {
       <input className="admin-input" placeholder="movie_id (optional)" value={movieId} onChange={(e) => setMovieId(e.target.value)} style={inputStyle} />
       <div style={{ display: 'flex', gap: 8 }}>
         <button onClick={add} disabled={loading} style={primaryButtonStyle}>{loading ? 'Adding...' : 'Add link'}</button>
+        <button onClick={onOpenSeriesScraper} style={{ ...primaryButtonStyle, background: '#7c3aed' }}>Scrape Series Episodes</button>
       </div>
     </div>
   )

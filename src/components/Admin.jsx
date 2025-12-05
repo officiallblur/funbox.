@@ -198,6 +198,9 @@ const Admin = () => {
                 {links.length === 0 && <p>No links found.</p>}
               </div>
             )}
+            
+            <h2 style={{ ...h2Style, marginTop: 16 }}>Scrape Series Episodes (TMDB)</h2>
+            <SeriesScraperForm onAdded={() => fetchLinks()} showMsg={showMsg} />
           </section>
         </div>
       </div>
@@ -302,6 +305,271 @@ const AdminLinkRow = ({ link, onSaved, onDeleted }) => {
           <button onClick={save} disabled={saving}>{saving ? 'Saving...' : 'Save'}</button>
           <button onClick={remove} style={{ background: 'transparent' }}>Delete</button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+const SeriesScraperForm = ({ onAdded, showMsg }) => {
+  const [seriesQuery, setSeriesQuery] = useState('')
+  const [seriesResults, setSeriesResults] = useState([])
+  const [seriesLoading, setSeriesLoading] = useState(false)
+  const [selectedSeries, setSelectedSeries] = useState(null)
+  const [seriesDetails, setSeriesDetails] = useState(null)
+  const [selectedSeason, setSelectedSeason] = useState('')
+  const [selectedEpisodes, setSelectedEpisodes] = useState(new Set())
+  const [scrapingInProgress, setScrapingInProgress] = useState(false)
+  const seriesQueryTimer = useRef(null)
+
+  const searchSeries = async (q) => {
+    if (!q || q.trim().length < 2) {
+      setSeriesResults([])
+      return
+    }
+    setSeriesLoading(true)
+    try {
+      const API_KEY = 'ce1a0db13c99a45fd7effb86ab82f78f'
+      const r = await fetch(`https://api.themoviedb.org/3/search/tv?api_key=${API_KEY}&query=${encodeURIComponent(q)}&language=en-US&page=1`)
+      const json = await r.json()
+      setSeriesResults(json.results || [])
+    } catch (e) {
+      console.error('TMDB series search failed', e)
+      setSeriesResults([])
+    }
+    setSeriesLoading(false)
+  }
+
+  const onSeriesChange = (val) => {
+    setSeriesQuery(val)
+    if (seriesQueryTimer.current) clearTimeout(seriesQueryTimer.current)
+    seriesQueryTimer.current = setTimeout(() => searchSeries(val), 380)
+  }
+
+  const selectSeries = async (series) => {
+    setSelectedSeries(series)
+    setSelectedSeason('')
+    setSelectedEpisodes(new Set())
+    
+    try {
+      const API_KEY = 'ce1a0db13c99a45fd7effb86ab82f78f'
+      const r = await fetch(`https://api.themoviedb.org/3/tv/${series.id}?api_key=${API_KEY}&language=en-US`)
+      const json = await r.json()
+      setSeriesDetails(json)
+      showMsg?.(`Selected: ${series.name}`)
+    } catch (e) {
+      console.error('Failed to fetch series details:', e)
+      showMsg?.('Failed to load series details', 'error')
+    }
+  }
+
+  const getEpisodesForSeason = (seasonNumber) => {
+    if (!seriesDetails || !seriesDetails.seasons) return 0
+    const season = seriesDetails.seasons.find(s => s.season_number === Number(seasonNumber))
+    return season ? season.episode_count : 0
+  }
+
+  const handleScrapeSeason = async () => {
+    if (!selectedSeries || !selectedSeason) {
+      showMsg?.('Select a series and season first', 'error')
+      return
+    }
+    if (selectedEpisodes.size === 0) {
+      showMsg?.('Select at least one episode', 'error')
+      return
+    }
+
+    setScrapingInProgress(true)
+    const { data: session } = await supabase.auth.getSession()
+    const token = session?.session?.access_token
+    if (!token) {
+      showMsg?.('Authentication required', 'error')
+      setScrapingInProgress(false)
+      return
+    }
+
+    let totalLinksFound = 0
+    let successCount = 0
+    const season = Number(selectedSeason)
+    const episodes = Array.from(selectedEpisodes).sort((a, b) => a - b)
+
+    try {
+      for (const ep of episodes) {
+        try {
+          const resp = await fetch(`/api/scraper/episode`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({
+              tvId: selectedSeries.id,
+              seriesTitle: selectedSeries.name,
+              season,
+              episode: ep
+            })
+          })
+          const text = await resp.text()
+          let data
+          try { data = text ? JSON.parse(text) : {} } catch (e) { data = { _raw: text } }
+          if (resp.ok && data && data.success) {
+            totalLinksFound += (data.count || 0)
+            successCount++
+          }
+        } catch (e) {
+          console.error(`Error scraping S${season}E${ep}:`, e)
+        }
+      }
+
+      showMsg?.(`✓ Scraped ${successCount}/${episodes.length} episodes, found ${totalLinksFound} link(s)`)
+      
+      // Reset form
+      setSeriesQuery('')
+      setSeriesResults([])
+      setSelectedSeries(null)
+      setSeriesDetails(null)
+      setSelectedSeason('')
+      setSelectedEpisodes(new Set())
+      onAdded()
+    } catch (e) {
+      console.error('Scrape error:', e)
+      showMsg?.('Scrape error: ' + (e.message || e), 'error')
+    } finally {
+      setScrapingInProgress(false)
+    }
+  }
+
+  const episodeCount = selectedSeason ? getEpisodesForSeason(selectedSeason) : 0
+
+  return (
+    <div style={{ display: 'grid', gap: 12, padding: 14, background: '#0f1720', borderRadius: 8, marginTop: 12 }}>
+      {/* Series Search */}
+      <div style={{ display: 'grid', gap: 8 }}>
+        <label style={{ fontWeight: 600 }}>Search Series</label>
+        <input 
+          placeholder="Type series name..." 
+          value={seriesQuery} 
+          onChange={(e) => onSeriesChange(e.target.value)} 
+          style={inputStyle}
+        />
+        {seriesLoading && <div style={{ color: '#9fb0c8', fontSize: 12 }}>Searching...</div>}
+        {!seriesLoading && seriesResults.length > 0 && (
+          <div style={{ maxHeight: 240, overflow: 'auto', display: 'grid', gap: 6 }}>
+            {seriesResults.slice(0, 8).map(r => (
+              <div 
+                key={r.id} 
+                onClick={() => selectSeries(r)}
+                style={{ 
+                  display: 'flex', 
+                  gap: 10, 
+                  alignItems: 'center', 
+                  padding: '10px 12px', 
+                  background: selectedSeries?.id === r.id ? '#1e4620' : '#071121', 
+                  borderRadius: 6,
+                  border: selectedSeries?.id === r.id ? '1px solid #4ade80' : 'none',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <img src={r.poster_path ? `https://image.tmdb.org/t/p/w92${r.poster_path}` : 'https://via.placeholder.com/40x60?text=No'} alt="" style={{ width: 40, height: 60, objectFit: 'cover', borderRadius: 4 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}</div>
+                  <div style={{ fontSize: 12, color: '#9fb0c8' }}>{r.first_air_date ? new Date(r.first_air_date).getFullYear() : 'N/A'}</div>
+                </div>
+                {selectedSeries?.id === r.id && <span style={{ color: '#4ade80', fontWeight: 700 }}>✓</span>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Season Selection */}
+      {selectedSeries && seriesDetails && (
+        <div style={{ display: 'grid', gap: 8 }}>
+          <label style={{ fontWeight: 600 }}>Select Season</label>
+          <select 
+            value={selectedSeason} 
+            onChange={(e) => {
+              setSelectedSeason(e.target.value)
+              setSelectedEpisodes(new Set())
+            }}
+            style={{ ...inputStyle, cursor: 'pointer', padding: '10px 12px' }}
+          >
+            <option value="">-- Choose Season --</option>
+            {seriesDetails.seasons && seriesDetails.seasons.map(s => (
+              <option key={s.season_number} value={s.season_number}>
+                Season {s.season_number} ({s.episode_count} episodes)
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {/* Episode Selection */}
+      {selectedSeason && episodeCount > 0 && (
+        <div style={{ display: 'grid', gap: 8 }}>
+          <label style={{ fontWeight: 600 }}>Select Episodes (Season {selectedSeason})</label>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(50px, 1fr))', gap: 6 }}>
+            {Array.from({ length: episodeCount }, (_, i) => i + 1).map(ep => (
+              <label 
+                key={ep}
+                style={{ 
+                  display: 'flex', 
+                  gap: 6, 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  padding: '8px 10px', 
+                  background: selectedEpisodes.has(ep) ? '#1e4620' : '#0b1420', 
+                  borderRadius: 6,
+                  border: selectedEpisodes.has(ep) ? '1px solid #4ade80' : '1px solid rgba(255,255,255,0.1)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  fontSize: 12,
+                  fontWeight: 500
+                }}
+              >
+                <input 
+                  type="checkbox" 
+                  checked={selectedEpisodes.has(ep)}
+                  onChange={(e) => {
+                    const next = new Set(selectedEpisodes)
+                    if (e.target.checked) next.add(ep)
+                    else next.delete(ep)
+                    setSelectedEpisodes(next)
+                  }}
+                  style={{ cursor: 'pointer' }}
+                />
+                <span>E{ep}</span>
+              </label>
+            ))}
+          </div>
+          <div style={{ fontSize: 12, color: '#9fb0c8' }}>Selected: {selectedEpisodes.size} episode(s)</div>
+        </div>
+      )}
+
+      {/* Action Buttons */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button 
+          onClick={handleScrapeSeason}
+          disabled={!selectedSeries || !selectedSeason || selectedEpisodes.size === 0 || scrapingInProgress}
+          style={{ 
+            ...primaryButtonStyle, 
+            background: scrapingInProgress ? '#4b5563' : '#7c3aed',
+            flex: 1,
+            minWidth: 120
+          }}
+        >
+          {scrapingInProgress ? 'Scraping...' : `Scrape ${selectedEpisodes.size} Episode(s)`}
+        </button>
+        <button 
+          onClick={() => {
+            setSeriesQuery('')
+            setSeriesResults([])
+            setSelectedSeries(null)
+            setSeriesDetails(null)
+            setSelectedSeason('')
+            setSelectedEpisodes(new Set())
+          }}
+          style={{ ...primaryButtonStyle, background: 'transparent', color: '#9fb0c8', border: '1px solid rgba(255,255,255,0.2)' }}
+        >
+          Clear
+        </button>
       </div>
     </div>
   )

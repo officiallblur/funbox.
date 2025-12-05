@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { supabase } from '../supabaseClient'
 import { useNavigate } from 'react-router-dom'
-import ScraperUI from './ScraperUI'
 
 const Admin = () => {
   const [users, setUsers] = useState([])
@@ -925,11 +924,24 @@ const Admin = () => {
 
       {/* Scraper Section */}
       <div style={{ marginTop: 30, paddingBottom: 20 }}>
-        <ScraperUI 
-          selectedTmdb={selectedTmdb} 
-          selectedTmdbSeries={selectedTmdbSeries}
-          showMsg={showMsg}
-        />
+        <section style={cardStyle}>
+          <h2 style={h2Style}>Single Movie/Series Scraper</h2>
+          <div style={{ display: 'grid', gap: 8 }}>
+            <p style={{ color: '#9fb0c8', fontSize: 14 }}>Use the options above to scrape movies or TV episodes. For movies, use the Movie section. For TV series, use the TV Series section with the new episode scraper.</p>
+            <div style={{ background: 'rgba(74,222,128,0.1)', padding: 12, borderRadius: 6, borderLeft: '3px solid #4ade80' }}>
+              <div style={{ fontWeight: 600, color: '#4ade80', marginBottom: 6 }}>💡 New Feature Available</div>
+              <div style={{ fontSize: 12, color: '#9fb0c8' }}>
+                The TV Series section now includes a powerful episode scraper with Full Season and Manual Selection modes. 
+                <br /><br />
+                <strong>Full Season Mode:</strong> Scrape all episodes 1-20 of a season automatically
+                <br />
+                <strong>Manual Mode:</strong> Scrape specific episodes (e.g., 1,2,3 or 1-5 or 1-3,5,7-9)
+                <br /><br />
+                To use: Select a series → Click its card → Click "🎬 Scrape Episodes"
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
       {/* End Scraper Section */}
     </div>
